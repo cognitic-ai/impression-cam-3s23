@@ -1,6 +1,6 @@
 {
   "expo": {
-    "icon": "https://agent.expo.app/static/icon.png",
+    "icon": "https://storage.googleapis.com/expo-agent-images-production/production/c606cab6-9136-428c-9561-161d7ba6811d/019c6dfa-673e-73c7-96ba-e6b73d0909d9/d65c8fa6-d86c-40df-b1bc-e70893c4ea39",
     "orientation": "default",
     "scheme": "acme",
     "userInterfaceStyle": "automatic",
@@ -15,7 +15,8 @@
       "expo-font",
       "expo-image",
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@bacons/apple-colors"
     ],
     "name": "Impression Cam",
     "owner": "slrncl"
