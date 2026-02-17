@@ -58,7 +58,7 @@ export async function paintWithGemini(
 
   // Read the photo as base64
   const base64 = await FileSystem.readAsStringAsync(photoUri, {
-    encoding: FileSystem.EncodingType.Base64,
+    encoding: "base64",
   });
 
   onProgress?.("Sending to Gemini…");
@@ -114,7 +114,7 @@ export async function paintWithGemini(
   const outputUri =
     FileSystem.cacheDirectory + `painting_${Date.now()}.png`;
   await FileSystem.writeAsStringAsync(outputUri, imagePart.inline_data.data, {
-    encoding: FileSystem.EncodingType.Base64,
+    encoding: "base64",
   });
 
   return outputUri;
