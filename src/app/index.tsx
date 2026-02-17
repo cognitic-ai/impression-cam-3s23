@@ -7,6 +7,7 @@ import {
   Dimensions,
   Alert,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { CameraView, useCameraPermissions, CameraType } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
@@ -14,58 +15,83 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { PAINT_STYLES, PaintStyle, paintWithGemini } from "@/services/gemini-paint";
 
-const FILTERS = [
-  { id: "monet", label: "Monet", tint: "rgba(180,210,230,0.28)" },
-  { id: "renoir", label: "Renoir", tint: "rgba(240,180,150,0.22)" },
-  { id: "seurat", label: "Seurat", tint: "rgba(200,220,180,0.20)" },
-  { id: "turner", label: "Turner", tint: "rgba(255,220,100,0.25)" },
-  { id: "pissarro", label: "Pissarro", tint: "rgba(160,200,170,0.22)" },
-];
+const { width, height } = Dimensions.get("window");
 
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
   const [facing, setFacing] = useState<CameraType>("back");
-  const [selectedFilter, setSelectedFilter] = useState(0);
+  const [selectedStyle, setSelectedStyle] = useState<PaintStyle>(PAINT_STYLES[0]);
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
-  const [capturing, setCapturing] = useState(false);
+  const [painting, setPainting] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [progressMsg, setProgressMsg] = useState("");
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
+  const paintScale = useSharedValue(1);
 
-  const filter = FILTERS[selectedFilter];
+  const paintStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: paintScale.value }],
+  }));
 
   const handleCapture = useCallback(async () => {
-    if (!cameraRef.current || capturing) return;
-    setCapturing(true);
+    if (!cameraRef.current || processing) return;
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    paintScale.value = withSpring(0.94, {}, () => {
+      paintScale.value = withSpring(1);
+    });
+
+    setProcessing(true);
+    setPainting(null);
+    setProgressMsg("Capturing…");
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.92 });
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.88 });
       if (!photo) return;
-
       setLastPhoto(photo.uri);
 
-      if (!mediaPermission?.granted) {
-        const { granted } = await requestMediaPermission();
-        if (!granted) {
-          Alert.alert("Permission needed", "Allow photo library access to save impressions.");
-          return;
-        }
-      }
+      const paintedUri = await paintWithGemini(
+        photo.uri,
+        selectedStyle,
+        (msg) => setProgressMsg(msg)
+      );
 
-      await MediaLibrary.saveToLibraryAsync(photo.uri);
+      setPainting(paintedUri);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
+
+      // Save to library
+      const perms = mediaPermission?.granted
+        ? { granted: true }
+        : await requestMediaPermission();
+      if (perms.granted) {
+        await MediaLibrary.saveToLibraryAsync(paintedUri);
+      }
+    } catch (e: any) {
       console.error(e);
+      Alert.alert("Painting failed", e?.message ?? "Unknown error");
     } finally {
-      setCapturing(false);
+      setProcessing(false);
     }
-  }, [capturing, mediaPermission, requestMediaPermission]);
+  }, [processing, selectedStyle, mediaPermission, requestMediaPermission, paintScale]);
 
   const handleFlip = useCallback(() => {
     Haptics.selectionAsync();
     setFacing((f) => (f === "back" ? "front" : "back"));
+  }, []);
+
+  const handleDismissPainting = useCallback(() => {
+    setPainting(null);
   }, []);
 
   if (!permission) return <View style={styles.container} />;
@@ -74,7 +100,7 @@ export default function CameraScreen() {
     return (
       <View style={[styles.container, styles.permissionContainer]}>
         <Text style={styles.permissionTitle}>Impressionist</Text>
-        <Text style={styles.permissionSubtitle}>a camera for painted moments</Text>
+        <Text style={styles.permissionSubtitle}>AI-painted moments</Text>
         <Pressable style={styles.permissionButton} onPress={requestPermission}>
           <Text style={styles.permissionButtonText}>Allow Camera</Text>
         </Pressable>
@@ -84,60 +110,99 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Camera */}
+      {/* Live camera */}
       <CameraView
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing={facing}
       />
 
-      {/* Impressionist tint overlay */}
+      {/* Subtle style tint on viewfinder */}
       <View
-        style={[StyleSheet.absoluteFill, { backgroundColor: filter.tint }]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: selectedStyle.tint }]}
         pointerEvents="none"
       />
 
-      {/* Grain overlay */}
-      <GrainOverlay />
+      {/* Painted result overlay */}
+      {painting && (
+        <Animated.View
+          entering={FadeIn.duration(600)}
+          style={StyleSheet.absoluteFill}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleDismissPainting}>
+            <Image source={{ uri: painting }} style={styles.paintingResult} resizeMode="cover" />
+            <BlurView intensity={40} tint="dark" style={styles.paintingBadge}>
+              <Text style={styles.paintingBadgeLabel}>{selectedStyle.label} · tap to dismiss</Text>
+            </BlurView>
+          </Pressable>
+        </Animated.View>
+      )}
 
-      {/* Top title */}
+      {/* Processing overlay */}
+      {processing && (
+        <Animated.View
+          entering={FadeIn.duration(300)}
+          exiting={FadeOut.duration(300)}
+          style={styles.processingOverlay}
+        >
+          <BlurView intensity={60} tint="dark" style={styles.processingCard}>
+            <ActivityIndicator size="large" color="rgba(255,255,255,0.85)" />
+            <Text style={styles.processingText}>{progressMsg}</Text>
+            <Text style={styles.processingHint}>Gemini is painting your image…</Text>
+          </BlurView>
+        </Animated.View>
+      )}
+
+      {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <BlurView intensity={18} tint="dark" style={styles.topBarBlur}>
           <Text style={styles.appTitle}>impressionist</Text>
         </BlurView>
       </View>
 
-      {/* Filter selector */}
-      <View style={[styles.filterStrip, { bottom: insets.bottom + 138 }]}>
-        {FILTERS.map((f, i) => (
-          <Pressable
-            key={f.id}
-            onPress={() => {
-              setSelectedFilter(i);
-              Haptics.selectionAsync();
-            }}
-            style={[
-              styles.filterChip,
-              i === selectedFilter && styles.filterChipActive,
-            ]}
-          >
-            <View style={[styles.filterSwatch, { backgroundColor: f.tint }]} />
-            <Text style={[styles.filterLabel, i === selectedFilter && styles.filterLabelActive]}>
-              {f.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      {/* Style selector */}
+      {!painting && !processing && (
+        <Animated.View
+          entering={FadeIn}
+          style={[styles.styleStrip, { bottom: insets.bottom + 136 }]}
+        >
+          {PAINT_STYLES.map((s) => (
+            <Pressable
+              key={s.id}
+              onPress={() => {
+                setSelectedStyle(s);
+                Haptics.selectionAsync();
+              }}
+              style={[
+                styles.styleChip,
+                s.id === selectedStyle.id && styles.styleChipActive,
+              ]}
+            >
+              <View style={[styles.styleSwatch, { backgroundColor: s.tint }]} />
+              <Text
+                style={[
+                  styles.styleLabel,
+                  s.id === selectedStyle.id && styles.styleLabelActive,
+                ]}
+              >
+                {s.label}
+              </Text>
+            </Pressable>
+          ))}
+        </Animated.View>
+      )}
 
-      {/* Controls bar */}
+      {/* Bottom controls */}
       <BlurView
         intensity={28}
         tint="dark"
         style={[styles.controls, { paddingBottom: insets.bottom + 16 }]}
       >
-        {/* Gallery thumbnail */}
+        {/* Gallery */}
         <Pressable style={styles.thumbnailButton} onPress={() => router.push("/gallery")}>
-          {lastPhoto ? (
+          {painting ? (
+            <Image source={{ uri: painting }} style={styles.thumbnail} />
+          ) : lastPhoto ? (
             <Image source={{ uri: lastPhoto }} style={styles.thumbnail} />
           ) : (
             <View style={styles.thumbnailEmpty} />
@@ -145,53 +210,34 @@ export default function CameraScreen() {
         </Pressable>
 
         {/* Shutter */}
-        <Pressable
-          onPress={handleCapture}
-          style={({ pressed }) => [
-            styles.shutter,
-            pressed && styles.shutterPressed,
-            capturing && styles.shutterCapturing,
-          ]}
-        >
-          <View style={styles.shutterInner} />
-        </Pressable>
+        <Animated.View style={paintStyle}>
+          <Pressable
+            onPress={handleCapture}
+            disabled={processing}
+            style={({ pressed }) => [
+              styles.shutter,
+              pressed && styles.shutterPressed,
+              processing && styles.shutterProcessing,
+            ]}
+          >
+            <View
+              style={[
+                styles.shutterInner,
+                processing && styles.shutterInnerProcessing,
+              ]}
+            />
+          </Pressable>
+        </Animated.View>
 
-        {/* Flip camera */}
-        <Pressable onPress={handleFlip} style={styles.flipButton}>
+        {/* Flip */}
+        <Pressable
+          onPress={handleFlip}
+          disabled={processing}
+          style={[styles.flipButton, processing && { opacity: 0.4 }]}
+        >
           <Text style={styles.flipIcon}>⇄</Text>
         </Pressable>
       </BlurView>
-    </View>
-  );
-}
-
-function GrainOverlay() {
-  const { width, height } = Dimensions.get("window");
-  const dots = Array.from({ length: 280 }, (_, i) => ({
-    key: i,
-    x: Math.random() * width,
-    y: Math.random() * height,
-    size: Math.random() * 2.5 + 0.8,
-    opacity: Math.random() * 0.06 + 0.02,
-  }));
-
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {dots.map((d) => (
-        <View
-          key={d.key}
-          style={{
-            position: "absolute",
-            left: d.x,
-            top: d.y,
-            width: d.size,
-            height: d.size,
-            borderRadius: d.size / 2,
-            backgroundColor: "white",
-            opacity: d.opacity,
-          }}
-        />
-      ))}
     </View>
   );
 }
@@ -252,7 +298,7 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     fontStyle: "italic",
   },
-  filterStrip: {
+  styleStrip: {
     position: "absolute",
     left: 0,
     right: 0,
@@ -261,7 +307,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
   },
-  filterChip: {
+  styleChip: {
     alignItems: "center",
     gap: 4,
     paddingVertical: 7,
@@ -271,23 +317,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
-  filterChipActive: {
+  styleChipActive: {
     backgroundColor: "rgba(255,255,255,0.16)",
     borderColor: "rgba(255,255,255,0.38)",
   },
-  filterSwatch: {
+  styleSwatch: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
   },
-  filterLabel: {
+  styleLabel: {
     color: "rgba(255,255,255,0.45)",
     fontSize: 9,
     letterSpacing: 0.5,
   },
-  filterLabelActive: {
+  styleLabelActive: {
     color: "rgba(255,255,255,0.92)",
   },
   controls: {
@@ -310,10 +356,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.22)",
   },
-  thumbnail: {
-    width: 50,
-    height: 50,
-  },
+  thumbnail: { width: 50, height: 50 },
   thumbnailEmpty: {
     width: 50,
     height: 50,
@@ -330,17 +373,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   shutterPressed: {
-    transform: [{ scale: 0.92 }],
     backgroundColor: "rgba(255,255,255,0.25)",
   },
-  shutterCapturing: {
-    borderColor: "rgba(255,215,80,0.9)",
+  shutterProcessing: {
+    borderColor: "rgba(180,140,255,0.7)",
   },
   shutterInner: {
     width: 58,
     height: 58,
     borderRadius: 29,
     backgroundColor: "rgba(255,255,255,0.9)",
+  },
+  shutterInnerProcessing: {
+    backgroundColor: "rgba(180,140,255,0.6)",
   },
   flipButton: {
     width: 50,
@@ -356,5 +401,54 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.82)",
     fontSize: 22,
     fontWeight: "200",
+  },
+  // Painting result
+  paintingResult: {
+    width,
+    height,
+  },
+  paintingBadge: {
+    position: "absolute",
+    bottom: 160,
+    alignSelf: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  paintingBadgeLabel: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 12,
+    letterSpacing: 0.8,
+    fontStyle: "italic",
+  },
+  // Processing
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 20,
+  },
+  processingCard: {
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 36,
+    paddingHorizontal: 48,
+    borderRadius: 24,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  processingText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 16,
+    fontWeight: "300",
+    letterSpacing: 1,
+  },
+  processingHint: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 12,
+    letterSpacing: 0.5,
+    fontStyle: "italic",
   },
 });
