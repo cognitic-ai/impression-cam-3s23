@@ -8,7 +8,6 @@ import {
   Alert,
   Image,
   ActivityIndicator,
-  PanResponder,
 } from "react-native";
 import { CameraView, useCameraPermissions, CameraType } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
@@ -20,20 +19,16 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  runOnJS,
 } from "react-native-reanimated";
 import { PAINT_STYLES, PaintStyle, paintWithGemini } from "@/services/gemini-paint";
 
 const { width } = Dimensions.get("window");
 
-// Zoom ruler config
-const ZOOM_STOPS = [
-  { label: "0.5x", value: 0 },
-  { label: "1x", value: 0.5 },
-  { label: "2x", value: 1 },
+const ZOOM_LEVELS = [
+  { label: "1×", zoom: 0 },
+  { label: "2×", zoom: 0.35 },
+  { label: "3×", zoom: 0.6 },
 ];
-const RULER_WIDTH = width - 40;
-const TICK_COUNT = 13;
 
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -43,7 +38,7 @@ export default function CameraScreen() {
   const [painting, setPainting] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState("");
-  const [zoomIndex, setZoomIndex] = useState(1); // default 1x
+  const [zoomIndex, setZoomIndex] = useState(0);
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
   const shutterScale = useSharedValue(1);
@@ -52,11 +47,7 @@ export default function CameraScreen() {
     transform: [{ scale: shutterScale.value }],
   }));
 
-  // Map zoom stop index → expo-camera zoom (0–1)
-  const cameraZoom = useMemo(() => {
-    const map = [0, 0, 0.5]; // 0.5x≈0, 1x≈0, 2x≈0.5 (device dependent)
-    return map[zoomIndex] ?? 0;
-  }, [zoomIndex]);
+  const cameraZoom = ZOOM_LEVELS[zoomIndex].zoom;
 
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current || processing) return;
@@ -127,8 +118,8 @@ export default function CameraScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* ── Zoom ruler ── */}
-      <ZoomRuler
+      {/* ── Zoom segmented control ── */}
+      <ZoomControl
         zoomIndex={zoomIndex}
         onZoomChange={(i) => {
           setZoomIndex(i);
@@ -155,7 +146,6 @@ export default function CameraScreen() {
             />
           )}
 
-          {/* Processing overlay inside card */}
           {processing && (
             <Animated.View
               entering={FadeIn.duration(200)}
@@ -171,7 +161,6 @@ export default function CameraScreen() {
 
       {/* ── Bottom toolbar ── */}
       <View style={[styles.toolbar, { paddingBottom: insets.bottom + 16 }]}>
-        {/* Left: thumbnail */}
         <View style={styles.toolbarLeft}>
           {painting ? (
             <Image source={{ uri: painting }} style={styles.thumbnail} />
@@ -180,7 +169,6 @@ export default function CameraScreen() {
           )}
         </View>
 
-        {/* Center: action buttons (save + dismiss) when painting ready */}
         <View style={styles.toolbarCenter}>
           {painting && !processing ? (
             <Animated.View entering={FadeIn.duration(300)} style={styles.actionStack}>
@@ -200,7 +188,6 @@ export default function CameraScreen() {
           ) : null}
         </View>
 
-        {/* Right: shutter */}
         <View style={styles.toolbarRight}>
           <Animated.View style={shutterAnimStyle}>
             <Pressable
@@ -215,70 +202,31 @@ export default function CameraScreen() {
   );
 }
 
-// ── Zoom Ruler ──────────────────────────────────────────────
-function ZoomRuler({
+// ── Zoom Segmented Control ───────────────────────────────────
+function ZoomControl({
   zoomIndex,
   onZoomChange,
 }: {
   zoomIndex: number;
   onZoomChange: (i: number) => void;
 }) {
-  const segmentWidth = RULER_WIDTH / (ZOOM_STOPS.length - 1);
-
-  // dot x position = index * segmentWidth
-  const dotX = zoomIndex * segmentWidth;
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (e) => {
-          const x = e.nativeEvent.locationX;
-          const i = Math.round((x / RULER_WIDTH) * (ZOOM_STOPS.length - 1));
-          const clamped = Math.max(0, Math.min(ZOOM_STOPS.length - 1, i));
-          onZoomChange(clamped);
-        },
-        onPanResponderMove: (e) => {
-          const x = e.nativeEvent.locationX;
-          const i = Math.round((x / RULER_WIDTH) * (ZOOM_STOPS.length - 1));
-          const clamped = Math.max(0, Math.min(ZOOM_STOPS.length - 1, i));
-          onZoomChange(clamped);
-        },
-      }),
-    [onZoomChange]
-  );
-
   return (
-    <View style={styles.rulerWrapper}>
-      {/* Tick marks */}
-      <View style={styles.rulerTicks} {...panResponder.panHandlers}>
-        {Array.from({ length: TICK_COUNT }).map((_, i) => {
-          const isStop = i % ((TICK_COUNT - 1) / (ZOOM_STOPS.length - 1)) === 0;
+    <View style={styles.segmentedWrapper}>
+      <View style={styles.segmentedTrack}>
+        {ZOOM_LEVELS.map((z, i) => {
+          const active = i === zoomIndex;
           return (
-            <View
-              key={i}
-              style={[
-                styles.tick,
-                isStop ? styles.tickMajor : styles.tickMinor,
-              ]}
-            />
+            <Pressable
+              key={z.label}
+              onPress={() => onZoomChange(i)}
+              style={[styles.segment, active && styles.segmentActive]}
+            >
+              <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>
+                {z.label}
+              </Text>
+            </Pressable>
           );
         })}
-      </View>
-
-      {/* Labels */}
-      <View style={styles.rulerLabels}>
-        {ZOOM_STOPS.map((s) => (
-          <Text key={s.label} style={styles.rulerLabel}>
-            {s.label}
-          </Text>
-        ))}
-      </View>
-
-      {/* Indicator dot */}
-      <View style={styles.rulerDotRow}>
-        <View style={[styles.rulerDot, { marginLeft: dotX - 5 }]} />
       </View>
     </View>
   );
@@ -291,7 +239,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f8f6",
   },
-  // Permission
   permissionContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -321,50 +268,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 0.5,
   },
-  // Zoom ruler
-  rulerWrapper: {
-    marginTop: 8,
-    marginHorizontal: 20,
-    width: RULER_WIDTH,
+  // Segmented control
+  segmentedWrapper: {
+    alignItems: "center",
+    marginTop: 12,
+    marginBottom: 4,
   },
-  rulerTicks: {
+  segmentedTrack: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    height: 28,
+    backgroundColor: "#e8e8e4",
+    borderRadius: 10,
+    padding: 3,
   },
-  tick: {
-    width: 1.5,
-    backgroundColor: "#999",
-    borderRadius: 1,
+  segment: {
+    paddingVertical: 6,
+    paddingHorizontal: 22,
+    borderRadius: 8,
   },
-  tickMajor: {
-    height: 18,
-    backgroundColor: "#444",
+  segmentActive: {
+    backgroundColor: "#fff",
+    boxShadow: "0px 1px 4px rgba(0,0,0,0.12)",
   },
-  tickMinor: {
-    height: 10,
-  },
-  rulerLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  rulerLabel: {
-    fontSize: 12,
-    color: "#555",
+  segmentLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#888",
     fontVariant: ["tabular-nums"],
   },
-  rulerDotRow: {
-    height: 20,
-    marginTop: 2,
-  },
-  rulerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#111",
-    marginTop: 5,
+  segmentLabelActive: {
+    color: "#111",
   },
   // Camera card
   cardWrapper: {
@@ -430,7 +362,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#e4e4e0",
   },
-  // Action stack (save + dismiss)
   actionStack: {
     gap: 8,
     alignItems: "center",
@@ -451,7 +382,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
-  // Shutter
   shutter: {
     width: 62,
     height: 62,
