@@ -2,7 +2,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
 const API_KEY = "AIzaSyBdjvTCeXbzCiRpz-4RLam4zCPEvloxDs8";
-const MODEL = "gemini-2.0-flash-preview-image-generation";
+const MODEL = "gemini-2.0-flash-exp-image-generation";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 async function uriToBase64(uri: string): Promise<string> {
