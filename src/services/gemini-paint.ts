@@ -1,8 +1,37 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { Platform } from "react-native";
 
 const API_KEY = "AIzaSyBdjvTCeXbzCiRpz-4RLam4zCPEvloxDs8";
 const MODEL = "gemini-2.0-flash-preview-image-generation";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+
+async function uriToBase64(uri: string): Promise<string> {
+  if (Platform.OS === "web") {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        // strip "data:...;base64," prefix
+        resolve(dataUrl.split(",")[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  return FileSystem.readAsStringAsync(uri, { encoding: "base64" });
+}
+
+async function saveBase64ToUri(base64: string): Promise<string> {
+  if (Platform.OS === "web") {
+    // Return a data URL directly on web
+    return `data:image/png;base64,${base64}`;
+  }
+  const outputUri = FileSystem.cacheDirectory + `painting_${Date.now()}.png`;
+  await FileSystem.writeAsStringAsync(outputUri, base64, { encoding: "base64" });
+  return outputUri;
+}
 
 export type PaintStyle = {
   id: string;
@@ -56,10 +85,7 @@ export async function paintWithGemini(
 ): Promise<string> {
   onProgress?.("Reading image…");
 
-  // Read the photo as base64
-  const base64 = await FileSystem.readAsStringAsync(photoUri, {
-    encoding: "base64",
-  });
+  const base64 = await uriToBase64(photoUri);
 
   onProgress?.("Sending to Gemini…");
 
@@ -110,12 +136,5 @@ export async function paintWithGemini(
     throw new Error("No image returned by Gemini");
   }
 
-  // Save to a temp file and return its URI
-  const outputUri =
-    FileSystem.cacheDirectory + `painting_${Date.now()}.png`;
-  await FileSystem.writeAsStringAsync(outputUri, imagePart.inline_data.data, {
-    encoding: "base64",
-  });
-
-  return outputUri;
+  return saveBase64ToUri(imagePart.inline_data.data);
 }
