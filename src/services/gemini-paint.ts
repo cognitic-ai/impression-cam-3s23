@@ -41,13 +41,15 @@ export type PaintStyle = {
 
 const BASE_REQUIREMENTS = `
 TECHNICAL REQUIREMENTS (apply to every painting):
-- Render every pixel as part of a cohesive oil painting — no photographic realism.
-- Use thick, visible impasto brushstrokes with textured dabs of paint that show physical canvas texture.
-- Soften all hard edges and geometric lines (buildings, fences, windows) into loose painterly forms.
-- Apply a warm Golden Hour glow: vibrant yellows and oranges on sunlit surfaces, soft purples on clouds and foliage.
-- Use a rich, saturated palette with high contrast between warm sunlit areas and cool blue-toned shadows.
-- Preserve the general composition and perspective of the original photo.
-- Capture the essence and mood of the scene rather than exact photographic details.
+- Render every pixel as part of a cohesive Monet-style oil painting — absolutely no photographic realism.
+- Use thick, visible impasto brushstrokes with short, comma-shaped and feathery dabs of paint typical of Monet.
+- Soften all hard edges and geometric lines (buildings, fences, windows) into loose, warm painterly forms.
+- Flood the entire scene with warm, golden-pink light — avoid cool blues and grey tones entirely.
+- Use a warm, sun-drenched palette: golden yellows, soft corals, warm pinks, peachy oranges, warm greens. No cool colours.
+- Shadows should be rendered as warm muted purples or dusty mauves, never cold blues or greys.
+- Flatten the sense of depth — treat foreground and background with equal painterly attention, avoiding photographic perspective depth cues.
+- Preserve the general composition of the original photo but render it as flat, textured paint on canvas.
+- The result must look unmistakably like a Monet oil painting hanging in a gallery.
 `.trim();
 
 export const PAINT_STYLES: PaintStyle[] = [
@@ -55,7 +57,7 @@ export const PAINT_STYLES: PaintStyle[] = [
     id: "monet",
     label: "Monet",
     tint: "rgba(180,210,230,0.3)",
-    prompt: `Transform this photo into an Impressionist oil painting in the style of Claude Monet. Use soft feathery brushstrokes and shimmering broken colour to capture light on water, foliage, and sky. Favour a cool, luminous palette of blues, greens, lilacs, and creamy whites, punctuated by golden reflections. Dissolve hard outlines into atmosphere.
+    prompt: `Transform this photo into an Impressionist oil painting that looks exactly like a Claude Monet original. Apply short, feathery comma-shaped brushstrokes of pure broken colour across the entire canvas. Use only warm tones throughout: golden yellows, soft corals, warm pinks, peachy whites, and sun-warmed greens. Render shadows as warm dusty mauves or rose-purples — never cool blue or grey. Dissolve all hard lines and architectural edges into warm, shimmering paint. The surface should appear flat and textured like a real Monet canvas — no illusion of photographic depth.
 
 ${BASE_REQUIREMENTS}`,
   },
