@@ -2,8 +2,18 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
 const API_KEY = "AIzaSyBdjvTCeXbzCiRpz-4RLam4zCPEvloxDs8";
-const MODEL = "gemini-2.0-flash-exp-image-generation";
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+
+// All known Gemini models that support image output, tried in order
+const IMAGE_MODELS = [
+  "gemini-2.0-flash-exp-image-generation",
+  "gemini-2.5-flash-image",
+  "gemini-3-flash-preview",
+  "gemini-3-pro-image-preview",
+];
+
+function endpointFor(model: string) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+}
 
 async function uriToBase64(uri: string): Promise<string> {
   if (Platform.OS === "web") {
@@ -84,57 +94,64 @@ export async function paintWithGemini(
   onProgress?: (msg: string) => void
 ): Promise<string> {
   onProgress?.("Reading image…");
-
   const base64 = await uriToBase64(photoUri);
-
-  onProgress?.("Sending to Gemini…");
 
   const body = {
     contents: [
       {
         parts: [
           { text: style.prompt },
-          {
-            inline_data: {
-              mime_type: "image/jpeg",
-              data: base64,
-            },
-          },
+          { inline_data: { mime_type: "image/jpeg", data: base64 } },
         ],
       },
     ],
-    generationConfig: {
-      responseModalities: ["IMAGE", "TEXT"],
-    },
+    generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
   };
 
-  const response = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": API_KEY,
-    },
-    body: JSON.stringify(body),
-  });
+  let lastError = "";
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${err}`);
+  for (let i = 0; i < IMAGE_MODELS.length; i++) {
+    const model = IMAGE_MODELS[i];
+    onProgress?.(`Painting with Gemini${i > 0 ? ` (attempt ${i + 1})` : ""}…`);
+
+    const response = await fetch(endpointFor(model), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": API_KEY },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      const errJson = JSON.parse(errText).error ?? {};
+      lastError = errJson.message ?? errText;
+
+      // 429 quota → try next model after a short pause
+      if (response.status === 429) {
+        if (i < IMAGE_MODELS.length - 1) {
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        throw new Error(
+          "All Gemini image models are over quota. Please enable billing at aistudio.google.com or wait and try again."
+        );
+      }
+
+      // 404 model not found → try next immediately
+      if (response.status === 404) continue;
+
+      throw new Error(`Gemini error ${response.status}: ${lastError}`);
+    }
+
+    onProgress?.("Rendering painting…");
+    const json = await response.json();
+    const parts = json?.candidates?.[0]?.content?.parts ?? [];
+    const imagePart = parts.find((p: any) =>
+      p.inline_data?.mime_type?.startsWith("image/")
+    );
+
+    if (!imagePart) throw new Error("No image returned by Gemini");
+    return saveBase64ToUri(imagePart.inline_data.data);
   }
 
-  onProgress?.("Rendering painting…");
-
-  const json = await response.json();
-
-  // Extract image from response
-  const parts = json?.candidates?.[0]?.content?.parts ?? [];
-  const imagePart = parts.find(
-    (p: any) => p.inline_data?.mime_type?.startsWith("image/")
-  );
-
-  if (!imagePart) {
-    throw new Error("No image returned by Gemini");
-  }
-
-  return saveBase64ToUri(imagePart.inline_data.data);
+  throw new Error(`Gemini painting failed: ${lastError}`);
 }
