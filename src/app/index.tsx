@@ -26,8 +26,8 @@ const { width } = Dimensions.get("window");
 
 const ZOOM_LEVELS = [
   { label: "1×", zoom: 0 },
-  { label: "2×", zoom: 0.35 },
-  { label: "3×", zoom: 0.6 },
+  { label: "2×", zoom: 0.15 },
+  { label: "3×", zoom: 0.3 },
 ];
 
 export default function CameraScreen() {
