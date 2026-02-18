@@ -1,19 +1,17 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
+import { GoogleGenAI } from "@google/genai";
 
 const API_KEY = "AIzaSyBdjvTCeXbzCiRpz-4RLam4zCPEvloxDs8";
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-// All known Gemini models that support image output, tried in order
+// All known models that support image output, tried in order
 const IMAGE_MODELS = [
   "gemini-2.0-flash-exp-image-generation",
   "gemini-2.5-flash-image",
   "gemini-3-flash-preview",
   "gemini-3-pro-image-preview",
 ];
-
-function endpointFor(model: string) {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-}
 
 async function uriToBase64(uri: string): Promise<string> {
   if (Platform.OS === "web") {
@@ -23,7 +21,6 @@ async function uriToBase64(uri: string): Promise<string> {
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
-        // strip "data:...;base64," prefix
         resolve(dataUrl.split(",")[1]);
       };
       reader.onerror = reject;
@@ -35,7 +32,6 @@ async function uriToBase64(uri: string): Promise<string> {
 
 async function saveBase64ToUri(base64: string): Promise<string> {
   if (Platform.OS === "web") {
-    // Return a data URL directly on web
     return `data:image/png;base64,${base64}`;
   }
   const outputUri = FileSystem.cacheDirectory + `painting_${Date.now()}.png`;
@@ -96,62 +92,66 @@ export async function paintWithGemini(
   onProgress?.("Reading image…");
   const base64 = await uriToBase64(photoUri);
 
-  const body = {
-    contents: [
-      {
-        parts: [
-          { text: style.prompt },
-          { inline_data: { mime_type: "image/jpeg", data: base64 } },
-        ],
-      },
-    ],
-    generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
-  };
+  const imagePart = { inlineData: { mimeType: "image/jpeg", data: base64 } };
+  const textPart = { text: style.prompt };
 
   let lastError = "";
+  let allQuotaExhausted = true;
 
   for (let i = 0; i < IMAGE_MODELS.length; i++) {
     const model = IMAGE_MODELS[i];
-    onProgress?.(`Painting with Gemini${i > 0 ? ` (attempt ${i + 1})` : ""}…`);
+    onProgress?.(`Painting with Gemini${i > 0 ? ` (model ${i + 1}/${IMAGE_MODELS.length})` : ""}…`);
 
-    const response = await fetch(endpointFor(model), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": API_KEY },
-      body: JSON.stringify(body),
-    });
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ role: "user", parts: [textPart, imagePart] }],
+        config: { responseModalities: ["IMAGE", "TEXT"] },
+      });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      const errJson = JSON.parse(errText).error ?? {};
-      lastError = errJson.message ?? errText;
+      const parts = response?.candidates?.[0]?.content?.parts ?? [];
+      const imgPart = parts.find(
+        (p: any) => p.inlineData?.mimeType?.startsWith("image/")
+      );
 
-      // 429 quota → try next model after a short pause
-      if (response.status === 429) {
+      if (!imgPart?.inlineData?.data) {
+        // Model responded but returned no image (e.g. safety block)
+        const textContent = parts.find((p: any) => p.text)?.text ?? "";
+        throw new Error(`No image in response: ${textContent.slice(0, 100)}`);
+      }
+
+      onProgress?.("Rendering painting…");
+      return await saveBase64ToUri(imgPart.inlineData.data);
+
+    } catch (e: any) {
+      const msg: string = e?.message ?? String(e);
+      lastError = msg;
+
+      const isQuota = msg.includes("429") || msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED");
+      const isNotFound = msg.includes("404") || msg.includes("not found") || msg.includes("NOT_FOUND");
+
+      if (isQuota) {
+        // Try next model after brief pause
         if (i < IMAGE_MODELS.length - 1) {
-          await new Promise((r) => setTimeout(r, 2000));
+          await new Promise((r) => setTimeout(r, 1500));
           continue;
         }
+        // All models quota-exhausted
         throw new Error(
-          "All Gemini image models are over quota. Please enable billing at aistudio.google.com or wait and try again."
+          "Gemini image generation quota exceeded.\n\nThis API key has no free-tier image generation allowance. Please enable billing at aistudio.google.com to use image generation."
         );
       }
 
-      // 404 model not found → try next immediately
-      if (response.status === 404) continue;
+      if (isNotFound) {
+        // Model doesn't exist for this key, skip silently
+        allQuotaExhausted = false;
+        continue;
+      }
 
-      throw new Error(`Gemini error ${response.status}: ${lastError}`);
+      // Any other error is a real failure
+      throw new Error(`Gemini error: ${msg.slice(0, 200)}`);
     }
-
-    onProgress?.("Rendering painting…");
-    const json = await response.json();
-    const parts = json?.candidates?.[0]?.content?.parts ?? [];
-    const imagePart = parts.find((p: any) =>
-      p.inline_data?.mime_type?.startsWith("image/")
-    );
-
-    if (!imagePart) throw new Error("No image returned by Gemini");
-    return saveBase64ToUri(imagePart.inline_data.data);
   }
 
-  throw new Error(`Gemini painting failed: ${lastError}`);
+  throw new Error(`Painting failed: ${lastError}`);
 }

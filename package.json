@@ -9,6 +9,7 @@
     "@bacons/apple-colors": "^0.0.8",
     "@expo/cli": "56.0.0-canary-20260128-67ce8d5",
     "@expo/vector-icons": "^15.0.3",
+    "@google/genai": "^1.41.0",
     "@react-navigation/bottom-tabs": "^7.10.1",
     "@react-navigation/native": "^7.1.28",
     "expo": "^55.0.0-preview.10",
