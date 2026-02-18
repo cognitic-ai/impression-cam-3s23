@@ -4,14 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 
 const API_KEY = "AIzaSyBdjvTCeXbzCiRpz-4RLam4zCPEvloxDs8";
 const ai = new GoogleGenAI({ apiKey: API_KEY });
-
-// All known models that support image output, tried in order
-const IMAGE_MODELS = [
-  "gemini-2.0-flash-exp-image-generation",
-  "gemini-2.5-flash-image",
-  "gemini-3-flash-preview",
-  "gemini-3-pro-image-preview",
-];
+const MODEL = "gemini-2.0-flash-exp-image-generation";
 
 async function uriToBase64(uri: string): Promise<string> {
   if (Platform.OS === "web") {
@@ -92,66 +85,30 @@ export async function paintWithGemini(
   onProgress?.("Reading image…");
   const base64 = await uriToBase64(photoUri);
 
-  const imagePart = { inlineData: { mimeType: "image/jpeg", data: base64 } };
-  const textPart = { text: style.prompt };
+  onProgress?.("Painting with Gemini…");
 
-  let lastError = "";
-  let allQuotaExhausted = true;
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: style.prompt },
+          { inlineData: { mimeType: "image/jpeg", data: base64 } },
+        ],
+      },
+    ],
+    config: { responseModalities: ["IMAGE", "TEXT"] },
+  });
 
-  for (let i = 0; i < IMAGE_MODELS.length; i++) {
-    const model = IMAGE_MODELS[i];
-    onProgress?.(`Painting with Gemini${i > 0 ? ` (model ${i + 1}/${IMAGE_MODELS.length})` : ""}…`);
+  const parts = response?.candidates?.[0]?.content?.parts ?? [];
+  const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
 
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: [{ role: "user", parts: [textPart, imagePart] }],
-        config: { responseModalities: ["IMAGE", "TEXT"] },
-      });
-
-      const parts = response?.candidates?.[0]?.content?.parts ?? [];
-      const imgPart = parts.find(
-        (p: any) => p.inlineData?.mimeType?.startsWith("image/")
-      );
-
-      if (!imgPart?.inlineData?.data) {
-        // Model responded but returned no image (e.g. safety block)
-        const textContent = parts.find((p: any) => p.text)?.text ?? "";
-        throw new Error(`No image in response: ${textContent.slice(0, 100)}`);
-      }
-
-      onProgress?.("Rendering painting…");
-      return await saveBase64ToUri(imgPart.inlineData.data);
-
-    } catch (e: any) {
-      const msg: string = e?.message ?? String(e);
-      lastError = msg;
-
-      const isQuota = msg.includes("429") || msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED");
-      const isNotFound = msg.includes("404") || msg.includes("not found") || msg.includes("NOT_FOUND");
-
-      if (isQuota) {
-        // Try next model after brief pause
-        if (i < IMAGE_MODELS.length - 1) {
-          await new Promise((r) => setTimeout(r, 1500));
-          continue;
-        }
-        // All models quota-exhausted
-        throw new Error(
-          "Gemini image generation quota exceeded.\n\nThis API key has no free-tier image generation allowance. Please enable billing at aistudio.google.com to use image generation."
-        );
-      }
-
-      if (isNotFound) {
-        // Model doesn't exist for this key, skip silently
-        allQuotaExhausted = false;
-        continue;
-      }
-
-      // Any other error is a real failure
-      throw new Error(`Gemini error: ${msg.slice(0, 200)}`);
-    }
+  if (!imgPart?.inlineData?.data) {
+    const textContent = parts.find((p: any) => p.text)?.text ?? "";
+    throw new Error(textContent || "No image returned by Gemini");
   }
 
-  throw new Error(`Painting failed: ${lastError}`);
+  onProgress?.("Rendering painting…");
+  return saveBase64ToUri(imgPart.inlineData.data);
 }
