@@ -2,7 +2,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import { GoogleGenAI } from "@google/genai";
 
-const MODEL = "gemini-2.0-flash-exp-image-generation";
+const MODEL = "gemini-2.5-flash-image";
 
 async function uriToBase64(uri: string): Promise<string> {
   if (Platform.OS === "web") {
@@ -113,8 +113,8 @@ export async function paintWithGemini(
       {
         role: "user",
         parts: [
-          { text: style.prompt },
           { inlineData: { mimeType: "image/jpeg", data: base64 } },
+          { text: `Using the photo above as the exact reference — preserving its composition, subjects, and scene — apply this transformation:\n\n${style.prompt}` },
         ],
       },
     ],
