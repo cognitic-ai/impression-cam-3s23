@@ -2,8 +2,6 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? "";
-const ai = new GoogleGenAI({ apiKey: API_KEY });
 const MODEL = "gemini-3-pro-image-preview";
 
 async function uriToBase64(uri: string): Promise<string> {
@@ -100,6 +98,10 @@ export async function paintWithGemini(
   style: PaintStyle,
   onProgress?: (msg: string) => void
 ): Promise<string> {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  if (!apiKey) throw new Error("EXPO_PUBLIC_GEMINI_API_KEY is not set.");
+  const ai = new GoogleGenAI({ apiKey });
+
   onProgress?.("Reading image…");
   const base64 = await uriToBase64(photoUri);
 
