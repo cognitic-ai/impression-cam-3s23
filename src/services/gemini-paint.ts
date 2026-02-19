@@ -98,8 +98,8 @@ export async function paintWithGemini(
   style: PaintStyle,
   onProgress?: (msg: string) => void
 ): Promise<string> {
-  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  if (!apiKey) throw new Error("EXPO_PUBLIC_GEMINI_API_KEY is not set.");
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("No Gemini API key found. Set EXPO_PUBLIC_GEMINI_API_KEY in your environment.");
   const ai = new GoogleGenAI({ apiKey });
 
   onProgress?.("Reading image…");
