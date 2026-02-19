@@ -25,9 +25,9 @@ import { PAINT_STYLES, PaintStyle, paintWithGemini } from "@/services/gemini-pai
 const { width } = Dimensions.get("window");
 
 const ZOOM_LEVELS = [
-  { label: "1×", zoom: 0 },
-  { label: "2×", zoom: 0.15 },
-  { label: "3×", zoom: 0.3 },
+  { label: "0.5×", scale: 0.7 },
+  { label: "1×",   scale: 1   },
+  { label: "2×",   scale: 2   },
 ];
 
 export default function CameraScreen() {
@@ -38,7 +38,7 @@ export default function CameraScreen() {
   const [painting, setPainting] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState("");
-  const [zoomIndex, setZoomIndex] = useState(0);
+  const [zoomIndex, setZoomIndex] = useState(1); // default 1×
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
   const shutterScale = useSharedValue(1);
@@ -47,7 +47,7 @@ export default function CameraScreen() {
     transform: [{ scale: shutterScale.value }],
   }));
 
-  const cameraZoom = ZOOM_LEVELS[zoomIndex].zoom;
+  const digitalScale = ZOOM_LEVELS[zoomIndex].scale;
 
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current || processing) return;
@@ -140,9 +140,8 @@ export default function CameraScreen() {
           ) : (
             <CameraView
               ref={cameraRef}
-              style={styles.cardMedia}
+              style={[styles.cardMedia, { transform: [{ scale: digitalScale }] }]}
               facing={facing}
-              zoom={cameraZoom}
             />
           )}
 
