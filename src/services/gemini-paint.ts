@@ -2,7 +2,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import { GoogleGenAI } from "@google/genai";
 
-const MODEL = "gemini-3-pro-image-preview";
+const MODEL = "gemini-2.0-flash-exp-image-generation";
 
 async function uriToBase64(uri: string): Promise<string> {
   if (Platform.OS === "web") {
