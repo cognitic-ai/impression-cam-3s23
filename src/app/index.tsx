@@ -28,6 +28,8 @@ import { PAINT_STYLES, PaintStyle, paintWithGemini } from "@/services/gemini-pai
 const { width } = Dimensions.get("window");
 const CARD_H = width * 0.82;
 const CARD_W = width - 32;
+const SHUTTER_SIZE = width * 0.48;
+const ACTION_BTN_H = (SHUTTER_SIZE - 10) / 2; // gap = 10
 
 const ZOOM_LEVELS = [
   { label: "0.5×", scale: 0.7 },
@@ -192,15 +194,8 @@ export default function CameraScreen() {
 
       {/* ── Bottom toolbar ── */}
       <View style={[styles.toolbar, { paddingBottom: insets.bottom + 16 }]}>
+        {/* Left: save + discard when painting ready */}
         <View style={styles.toolbarLeft}>
-          {painting ? (
-            <Image source={{ uri: painting }} style={styles.thumbnail} />
-          ) : (
-            <View style={styles.thumbnailEmpty} />
-          )}
-        </View>
-
-        <View style={styles.toolbarCenter}>
           {painting && !processing ? (
             <Animated.View entering={FadeIn.duration(300)} style={styles.actionStack}>
               <Pressable
@@ -208,17 +203,22 @@ export default function CameraScreen() {
                 style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
               >
                 <Text style={styles.actionIcon}>↓</Text>
+                <Text style={styles.actionLabel}>Save</Text>
               </Pressable>
               <Pressable
                 onPress={handleDismiss}
                 style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
               >
                 <Text style={styles.actionIcon}>✕</Text>
+                <Text style={styles.actionLabel}>Discard</Text>
               </Pressable>
             </Animated.View>
-          ) : null}
+          ) : (
+            <View style={styles.toolbarLeftPlaceholder} />
+          )}
         </View>
 
+        {/* Right: shutter */}
         <View style={styles.toolbarRight}>
           <Animated.View style={shutterAnimStyle}>
             <Pressable
@@ -364,56 +364,53 @@ const styles = StyleSheet.create({
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     paddingTop: 20,
     paddingHorizontal: 24,
   },
   toolbarLeft: {
     flex: 1,
     alignItems: "flex-start",
+    justifyContent: "center",
   },
-  toolbarCenter: {
-    flex: 1,
-    alignItems: "center",
+  toolbarLeftPlaceholder: {
+    width: SHUTTER_SIZE,
+    height: SHUTTER_SIZE,
   },
   toolbarRight: {
-    flex: 1,
     alignItems: "flex-end",
   },
-  thumbnail: {
-    width: 74,
-    height: 74,
-    borderRadius: 12,
-  },
-  thumbnailEmpty: {
-    width: 74,
-    height: 74,
-    borderRadius: 12,
-    backgroundColor: "#e4e4e0",
-  },
   actionStack: {
-    gap: 8,
-    alignItems: "center",
+    gap: 10,
   },
   actionBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: SHUTTER_SIZE,
+    height: ACTION_BTN_H,
+    borderRadius: 14,
     backgroundColor: "#1a1a1a",
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
   },
   actionBtnPressed: {
     backgroundColor: "#444",
   },
   actionIcon: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
   },
+  actionLabel: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "500",
+    letterSpacing: 0.3,
+  },
   shutter: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: SHUTTER_SIZE,
+    height: SHUTTER_SIZE,
+    borderRadius: SHUTTER_SIZE / 2,
     backgroundColor: "#111",
   },
   shutterDisabled: {
