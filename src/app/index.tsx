@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import {
   View,
   Pressable,
@@ -7,7 +7,6 @@ import {
   Dimensions,
   Alert,
   Image,
-  ActivityIndicator,
 } from "react-native";
 import { CameraView, useCameraPermissions, CameraType } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
@@ -15,14 +14,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import Animated, {
   FadeIn,
-  FadeOut,
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
+  withRepeat,
+  Easing,
+  interpolate,
 } from "react-native-reanimated";
+import { BlurView } from "expo-blur";
 import { PAINT_STYLES, PaintStyle, paintWithGemini } from "@/services/gemini-paint";
 
 const { width } = Dimensions.get("window");
+const CARD_H = width * 0.82;
+const CARD_W = width - 32;
 
 const ZOOM_LEVELS = [
   { label: "0.5×", scale: 0.7 },
@@ -35,17 +40,38 @@ export default function CameraScreen() {
   const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
   const [facing] = useState<CameraType>("back");
   const [selectedStyle] = useState<PaintStyle>(PAINT_STYLES[0]);
+  const [frozenPhoto, setFrozenPhoto] = useState<string | null>(null);
   const [painting, setPainting] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [progressMsg, setProgressMsg] = useState("");
-  const [zoomIndex, setZoomIndex] = useState(1); // default 1×
+  const [zoomIndex, setZoomIndex] = useState(1);
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
-  const shutterScale = useSharedValue(1);
 
+  const shutterScale = useSharedValue(1);
   const shutterAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: shutterScale.value }],
   }));
+
+  // Gradient wipe: animates 0 → 1 repeatedly while processing
+  const wipeProgress = useSharedValue(0);
+
+  useEffect(() => {
+    if (processing) {
+      wipeProgress.value = 0;
+      wipeProgress.value = withRepeat(
+        withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      );
+    } else {
+      wipeProgress.value = withTiming(0, { duration: 300 });
+    }
+  }, [processing]);
+
+  const wipeStyle = useAnimatedStyle(() => {
+    const translateX = interpolate(wipeProgress.value, [0, 1], [-CARD_W, CARD_W]);
+    return { transform: [{ translateX }] };
+  });
 
   const digitalScale = ZOOM_LEVELS[zoomIndex].scale;
 
@@ -59,22 +85,22 @@ export default function CameraScreen() {
 
     setProcessing(true);
     setPainting(null);
-    setProgressMsg("Capturing…");
 
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.88 });
       if (!photo) return;
 
-      const paintedUri = await paintWithGemini(
-        photo.uri,
-        selectedStyle,
-        (msg) => setProgressMsg(msg)
-      );
+      // Freeze the captured frame
+      setFrozenPhoto(photo.uri);
+
+      const paintedUri = await paintWithGemini(photo.uri, selectedStyle);
 
       setPainting(paintedUri);
+      setFrozenPhoto(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       console.error(e);
+      setFrozenPhoto(null);
       Alert.alert("Painting failed", e?.message ?? "Unknown error");
     } finally {
       setProcessing(false);
@@ -130,14 +156,9 @@ export default function CameraScreen() {
       {/* ── Camera card ── */}
       <View style={styles.cardWrapper}>
         <View style={styles.card}>
-          {painting ? (
-            <Animated.Image
-              entering={FadeIn.duration(500)}
-              source={{ uri: painting }}
-              style={styles.cardMedia}
-              resizeMode="cover"
-            />
-          ) : (
+
+          {/* Live camera — hidden while frozen/painting */}
+          {!frozenPhoto && !painting && (
             <CameraView
               ref={cameraRef}
               style={[styles.cardMedia, { transform: [{ scale: digitalScale }] }]}
@@ -145,15 +166,27 @@ export default function CameraScreen() {
             />
           )}
 
-          {processing && (
-            <Animated.View
-              entering={FadeIn.duration(200)}
-              exiting={FadeOut.duration(200)}
-              style={styles.cardOverlay}
-            >
-              <ActivityIndicator size="large" color="#111" />
-              <Text style={styles.processingText}>{progressMsg}</Text>
-            </Animated.View>
+          {/* Frozen photo + blur + gradient wipe while processing */}
+          {frozenPhoto && (
+            <View style={StyleSheet.absoluteFill}>
+              <Image source={{ uri: frozenPhoto }} style={styles.cardMedia} resizeMode="cover" />
+              {/* Blur overlay */}
+              <BlurView intensity={18} tint="light" style={StyleSheet.absoluteFill} />
+              {/* Gradient wipe shimmer */}
+              <Animated.View style={[styles.wipeTrack, wipeStyle]}>
+                <View style={styles.wipeGradient} />
+              </Animated.View>
+            </View>
+          )}
+
+          {/* Final painting — fade in */}
+          {painting && (
+            <Animated.Image
+              entering={FadeIn.duration(600)}
+              source={{ uri: painting }}
+              style={styles.cardMedia}
+              resizeMode="cover"
+            />
           )}
         </View>
       </View>
@@ -231,8 +264,6 @@ function ZoomControl({
   );
 }
 
-const CARD_H = width * 0.82;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -305,7 +336,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   card: {
-    width: width - 32,
+    width: CARD_W,
     height: CARD_H,
     borderRadius: 20,
     overflow: "hidden",
@@ -318,18 +349,16 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  cardOverlay: {
+  // Gradient wipe
+  wipeTrack: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(248,248,246,0.82)",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
+    width: CARD_W * 2,
   },
-  processingText: {
-    color: "#333",
-    fontSize: 14,
-    letterSpacing: 0.5,
-    fontStyle: "italic",
+  wipeGradient: {
+    flex: 1,
+    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 40%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.45) 60%, transparent 100%)",
+    // Native fallback
+    backgroundColor: "rgba(255,255,255,0.15)",
   },
   // Bottom toolbar
   toolbar: {
