@@ -357,8 +357,7 @@ const styles = StyleSheet.create({
   },
   wipeGradient: {
     flex: 1,
-    background: "linear-gradient(45deg, transparent 0%, rgba(255,255,255,0.45) 40%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.45) 60%, transparent 100%)",
-    // Native fallback
+    experimental_backgroundImage: "linear-gradient(45deg, transparent 0%, rgba(255,255,255,0.45) 40%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.45) 60%, transparent 100%)",
     backgroundColor: "rgba(255,255,255,0.15)",
   },
   // Bottom toolbar
