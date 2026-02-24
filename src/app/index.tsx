@@ -59,7 +59,7 @@ export default function CameraScreen() {
     if (processing) {
       wipeProgress.value = 0;
       wipeProgress.value = withRepeat(
-        withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
         -1,
         true
       );
@@ -70,7 +70,8 @@ export default function CameraScreen() {
 
   const wipeStyle = useAnimatedStyle(() => {
     const translateX = interpolate(wipeProgress.value, [0, 1], [-CARD_W, CARD_W]);
-    return { transform: [{ translateX }] };
+    const translateY = interpolate(wipeProgress.value, [0, 1], [CARD_H, -CARD_H]);
+    return { transform: [{ translateX }, { translateY }] };
   });
 
   const digitalScale = ZOOM_LEVELS[zoomIndex].scale;
@@ -338,7 +339,7 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_W,
     height: CARD_H,
-    borderRadius: 20,
+    borderRadius: 8,
     overflow: "hidden",
     backgroundColor: "#e0e0e0",
     boxShadow: "0px 4px 24px rgba(0,0,0,0.10)",
@@ -356,7 +357,7 @@ const styles = StyleSheet.create({
   },
   wipeGradient: {
     flex: 1,
-    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 40%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.45) 60%, transparent 100%)",
+    background: "linear-gradient(45deg, transparent 0%, rgba(255,255,255,0.45) 40%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.45) 60%, transparent 100%)",
     // Native fallback
     backgroundColor: "rgba(255,255,255,0.15)",
   },
