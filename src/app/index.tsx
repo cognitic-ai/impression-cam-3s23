@@ -369,9 +369,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingTop: 20,
     paddingHorizontal: 24,
+    gap: 24,
   },
   toolbarLeft: {
-    flex: 1,
+    width: SHUTTER_SIZE,
     alignItems: "flex-start",
     justifyContent: "center",
   },
@@ -380,6 +381,7 @@ const styles = StyleSheet.create({
     height: SHUTTER_SIZE,
   },
   toolbarRight: {
+    width: SHUTTER_SIZE,
     alignItems: "flex-end",
   },
   actionStack: {
