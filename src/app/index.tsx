@@ -303,9 +303,9 @@ const styles = StyleSheet.create({
   },
   // Segmented control
   segmentedWrapper: {
-    alignItems: "center",
     marginTop: 12,
     marginBottom: 4,
+    paddingHorizontal: 16,
   },
   segmentedTrack: {
     flexDirection: "row",
@@ -314,8 +314,9 @@ const styles = StyleSheet.create({
     padding: 3,
   },
   segment: {
+    flex: 1,
     paddingVertical: 6,
-    paddingHorizontal: 22,
+    alignItems: "center",
     borderRadius: 8,
   },
   segmentActive: {
