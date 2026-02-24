@@ -19,6 +19,12 @@
       "@bacons/apple-colors"
     ],
     "name": "Pocket Monet",
-    "owner": "slrncl"
+    "owner": "slrncl",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "652d501b-3856-42eb-844f-522ad26693be"
+      }
+    }
   }
 }

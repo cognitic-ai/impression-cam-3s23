@@ -68,10 +68,10 @@ export default function CameraScreen() {
     }
   }, [processing]);
 
+  const wipeDiag = Math.sqrt(CARD_W * CARD_W + CARD_H * CARD_H);
   const wipeStyle = useAnimatedStyle(() => {
-    const translateX = interpolate(wipeProgress.value, [0, 1], [-CARD_W, CARD_W]);
-    const translateY = interpolate(wipeProgress.value, [0, 1], [CARD_H, -CARD_H]);
-    return { transform: [{ translateX }, { translateY }] };
+    const t = interpolate(wipeProgress.value, [0, 1], [-wipeDiag, wipeDiag]);
+    return { transform: [{ translateX: t }, { translateY: -t }] };
   });
 
   const digitalScale = ZOOM_LEVELS[zoomIndex].scale;
@@ -172,11 +172,9 @@ export default function CameraScreen() {
             <View style={StyleSheet.absoluteFill}>
               <Image source={{ uri: frozenPhoto }} style={styles.cardMedia} resizeMode="cover" />
               {/* Blur overlay */}
-              <BlurView intensity={18} tint="light" style={StyleSheet.absoluteFill} />
+              <BlurView intensity={60} tint="light" style={StyleSheet.absoluteFill} />
               {/* Gradient wipe shimmer */}
-              <Animated.View style={[styles.wipeTrack, wipeStyle]}>
-                <View style={styles.wipeGradient} />
-              </Animated.View>
+              <Animated.View style={[styles.wipeShimmer, wipeStyle]} />
             </View>
           )}
 
@@ -350,15 +348,17 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  // Gradient wipe
-  wipeTrack: {
-    ...StyleSheet.absoluteFillObject,
-    width: CARD_W * 2,
-  },
-  wipeGradient: {
-    flex: 1,
-    experimental_backgroundImage: "linear-gradient(45deg, transparent 0%, rgba(255,255,255,0.45) 40%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.45) 60%, transparent 100%)",
-    backgroundColor: "rgba(255,255,255,0.15)",
+  // Gradient wipe shimmer — oversized band rotated 45° sweeping diagonally
+  wipeShimmer: {
+    position: "absolute",
+    width: 120,
+    height: CARD_H * 3,
+    top: -CARD_H,
+    left: CARD_W / 2 - 60,
+    transform: [{ rotate: "45deg" }],
+    experimental_backgroundImage:
+      "linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.35) 40%, rgba(255,255,255,0.65) 50%, rgba(255,255,255,0.35) 60%, transparent 100%)",
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   // Bottom toolbar
   toolbar: {
