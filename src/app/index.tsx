@@ -28,7 +28,9 @@ import { PAINT_STYLES, PaintStyle, paintWithGemini } from "@/services/gemini-pai
 const { width } = Dimensions.get("window");
 const CARD_H = width * 0.82;
 const CARD_W = width - 32;
-const SHUTTER_SIZE = width * 0.48;
+const TOOLBAR_H_PAD = 24;
+const TOOLBAR_GAP = 24;
+const SHUTTER_SIZE = Math.floor((width - TOOLBAR_H_PAD * 2 - TOOLBAR_GAP) / 2);
 const ACTION_BTN_H = (SHUTTER_SIZE - 10) / 2; // gap = 10
 
 const ZOOM_LEVELS = [
@@ -368,8 +370,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingTop: 20,
-    paddingHorizontal: 24,
-    gap: 24,
+    paddingHorizontal: TOOLBAR_H_PAD,
+    gap: TOOLBAR_GAP,
   },
   toolbarLeft: {
     width: SHUTTER_SIZE,
