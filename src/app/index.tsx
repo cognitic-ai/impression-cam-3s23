@@ -225,7 +225,9 @@ export default function CameraScreen() {
               onPress={handleCapture}
               disabled={processing}
               style={[styles.shutter, processing && styles.shutterDisabled]}
-            />
+            >
+              <Text style={styles.shutterLabel}>Paint</Text>
+            </Pressable>
           </Animated.View>
         </View>
       </View>
@@ -386,23 +388,25 @@ const styles = StyleSheet.create({
   actionBtn: {
     width: SHUTTER_SIZE,
     height: ACTION_BTN_H,
-    borderRadius: 14,
-    backgroundColor: "#1a1a1a",
+    borderRadius: 200,
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: "#111",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
   },
   actionBtnPressed: {
-    backgroundColor: "#444",
+    backgroundColor: "rgba(0,0,0,0.06)",
   },
   actionIcon: {
-    color: "#fff",
+    color: "#111",
     fontSize: 15,
     fontWeight: "500",
   },
   actionLabel: {
-    color: "#fff",
+    color: "#111",
     fontSize: 13,
     fontWeight: "500",
     letterSpacing: 0.3,
@@ -412,6 +416,15 @@ const styles = StyleSheet.create({
     height: SHUTTER_SIZE,
     borderRadius: SHUTTER_SIZE / 2,
     backgroundColor: "#111",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shutterLabel: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "500",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
   },
   shutterDisabled: {
     backgroundColor: "#aaa",
